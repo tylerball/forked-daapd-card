@@ -70,6 +70,14 @@ class ForkedDaapdCard extends LitElement {
       ws_port: config.ws_port || 3688
     }, config);
 
+    const headers = new Headers();
+
+    if (config.username && config.password) {
+      headers.append('Authorization', 'Basic ' + btoa(config.username + ':' + config.password));
+    }
+
+    cardConfig.headers = headers;
+
     this.config = cardConfig;
   }
 
@@ -84,15 +92,25 @@ class ForkedDaapdCard extends LitElement {
   }
 
   async _initSocket() {
-    this.ws = new WebSocket('ws://' + this.config.ip + ':' + this.config.ws_port, 'notify');
+    let protocol = 'ws';
+    if (window.location.protocol === 'https:') {
+      protocol = 'wss'
+    }
+    this.ws = new WebSocket(protocol + '://' + this.config.ip + '/daapdsocket', 'notify');
     this.ws.onopen = () => this._fetchOutputs();
-    this.ws.onerror = () => this.ws = null;
+    this.ws.onerror = (err) => {
+      this.ws = null
+    };
     this.ws.onmessage = (message) => this._fetchOutputs();
   }
 
   async _fetchOutputs() {
     try {
-      const resp = await fetch('http://' + this.config.ip + ':' + this.config.port + '/api/outputs');
+      const resp = await fetch(window.location.protocol + '//' + this.config.ip + '/daapd/api/outputs', {
+        headers: this.config.headers,
+        method: 'GET',
+        credentials: 'include'
+      });
       if (resp.ok) {
         let json = await resp.json();
         if (json.outputs) this.outputs = json.outputs;
@@ -206,11 +224,13 @@ class ForkedDaapdCard extends LitElement {
   async _setOutput(e, id, data) {
     e.stopPropagation();
     const options = {
+      headers: this.config.headers,
+      credentials: 'include',
       method: 'PUT',
       mode: 'cors',
       body: JSON.stringify(data)
     }
-    await fetch('http://' + this.config.ip + ':' + this.config.port + '/api/outputs/' + id, options);
+    await fetch(window.location.protocol + '//' + this.config.ip + '/daapd/api/outputs/' + id, options);
   }
 
   _computeMediaInfo() {
